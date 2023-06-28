@@ -4,8 +4,8 @@ go 1.20
 
 require (
 	github.com/google/go-github/v53 v53.2.0
-	github.com/sagernet/sing v0.2.6
-	github.com/sagernet/sing-box v1.2.8-0.20230623081225-c2bda9fbdeff
+	github.com/sagernet/sing v0.2.7
+	github.com/sagernet/sing-box v1.3.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/v2fly/v2ray-core/v5 v5.7.0
 	google.golang.org/protobuf v1.30.0
@@ -21,7 +21,7 @@ require (
 	github.com/golang/mock v1.6.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
-	github.com/miekg/dns v1.1.54 // indirect
+	github.com/miekg/dns v1.1.55 // indirect
 	github.com/nxadm/tail v1.4.8 // indirect
 	github.com/onsi/ginkgo v1.16.5 // indirect
 	github.com/quic-go/qpack v0.4.0 // indirect
