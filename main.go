@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/google/go-github/v53/github"
+	"github.com/google/go-github/v54/github"
 	"github.com/sagernet/sing-box/common/geosite"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -52,46 +52,18 @@ func get(downloadURL *string) ([]byte, error) {
 	return io.ReadAll(response.Body)
 }
 
-func download(release *github.RepositoryRelease) ([]byte, error) {
+func download(release *github.RepositoryRelease, assetName string) ([]byte, error) {
 	geositeAsset := common.Find(release.Assets, func(it *github.ReleaseAsset) bool {
-		return *it.Name == "geosite.dat"
+		return *it.Name == assetName
 	})
 	geositeChecksumAsset := common.Find(release.Assets, func(it *github.ReleaseAsset) bool {
-		return *it.Name == "geosite.dat.sha256sum"
+		return *it.Name == assetName+".sha256sum"
 	})
 	if geositeAsset == nil {
-		return nil, E.New("geosite asset not found in upstream release ", release.Name)
+		return nil, E.New(assetName+" asset not found in upstream release ", release.Name)
 	}
 	if geositeChecksumAsset == nil {
-		return nil, E.New("geosite asset not found in upstream release ", release.Name)
-	}
-	data, err := get(geositeAsset.BrowserDownloadURL)
-	if err != nil {
-		return nil, err
-	}
-	remoteChecksum, err := get(geositeChecksumAsset.BrowserDownloadURL)
-	if err != nil {
-		return nil, err
-	}
-	checksum := sha256.Sum256(data)
-	if hex.EncodeToString(checksum[:]) != string(remoteChecksum[:64]) {
-		return nil, E.New("checksum mismatch")
-	}
-	return data, nil
-}
-
-func downloadlite(release *github.RepositoryRelease) ([]byte, error) {
-	geositeAsset := common.Find(release.Assets, func(it *github.ReleaseAsset) bool {
-		return *it.Name == "geosite-lite.dat"
-	})
-	geositeChecksumAsset := common.Find(release.Assets, func(it *github.ReleaseAsset) bool {
-		return *it.Name == "geosite-lite.dat.sha256sum"
-	})
-	if geositeAsset == nil {
-		return nil, E.New("geosite-lite asset not found in upstream release ", release.Name)
-	}
-	if geositeChecksumAsset == nil {
-		return nil, E.New("geosite-lite asset not found in upstream release ", release.Name)
+		return nil, E.New(assetName+" checksum asset not found in upstream release ", release.Name)
 	}
 	data, err := get(geositeAsset.BrowserDownloadURL)
 	if err != nil {
@@ -193,13 +165,13 @@ func parse(vGeositeData []byte) (map[string][]geosite.Item, error) {
 	return domainMap, nil
 }
 
-func generate(release *github.RepositoryRelease, output string) error {
+func generate(release *github.RepositoryRelease, output string, assetName string) error {
 	outputFile, err := os.Create(output)
 	if err != nil {
 		return err
 	}
 	defer outputFile.Close()
-	vData, err := download(release)
+	vData, err := download(release, assetName)
 	if err != nil {
 		return err
 	}
@@ -212,43 +184,12 @@ func generate(release *github.RepositoryRelease, output string) error {
 	return geosite.Write(outputFile, domainMap)
 }
 
-func generatelite(release *github.RepositoryRelease, output string) error {
-	outputFile, err := os.Create(output)
-	if err != nil {
-		return err
-	}
-	defer outputFile.Close()
-	vData, err := downloadlite(release)
-	if err != nil {
-		return err
-	}
-	domainMap, err := parse(vData)
-	if err != nil {
-		return err
-	}
-	outputPath, _ := filepath.Abs(output)
-	os.Stderr.WriteString("write " + outputPath + "\n")
-	return geosite.Write(outputFile, domainMap)
-}
-
-func release(source string, output string) error {
+func release(source string, output string, assetName string) error {
 	sourceRelease, err := fetch(source)
 	if err != nil {
 		return err
 	}
-	err = generate(sourceRelease, output)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func releaselite(source string, output string) error {
-	sourceRelease, err := fetch(source)
-	if err != nil {
-		return err
-	}
-	err = generatelite(sourceRelease, output)
+	err = generate(sourceRelease, output, assetName)
 	if err != nil {
 		return err
 	}
@@ -256,11 +197,11 @@ func releaselite(source string, output string) error {
 }
 
 func main() {
-	err := release("chocolate4u/Iran-v2ray-rules", "geosite.db")
+	err := release("chocolate4u/Iran-v2ray-rules", "geosite.db", "geosite.dat")
 	if err != nil {
 		logrus.Fatal(err)
 	}
-	err = releaselite("chocolate4u/Iran-v2ray-rules", "geosite-lite.db")
+	err = release("chocolate4u/Iran-v2ray-rules", "geosite-lite.db", "geosite-lite.dat")
 	if err != nil {
 		logrus.Fatal(err)
 	}
