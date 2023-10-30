@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/google/go-github/v55/github"
+	"github.com/google/go-github/v56/github"
 	"github.com/sagernet/sing-box/common/geosite"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -202,6 +202,10 @@ func main() {
 		logrus.Fatal(err)
 	}
 	err = release("chocolate4u/Iran-v2ray-rules", "geosite-lite.db", "geosite-lite.dat")
+	if err != nil {
+		logrus.Fatal(err)
+	}
+	err = release("chocolate4u/Iran-v2ray-rules", "security.db", "security.dat")
 	if err != nil {
 		logrus.Fatal(err)
 	}
