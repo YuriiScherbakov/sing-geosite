@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/google/go-github/v56/github"
+	"github.com/google/go-github/v57/github"
 	"github.com/sagernet/sing-box/common/geosite"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
