@@ -10,11 +10,15 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/google/go-github/v57/github"
 	"github.com/sagernet/sing-box/common/geosite"
+	"github.com/sagernet/sing-box/common/srs"
+	C "github.com/sagernet/sing-box/constant"
+	"github.com/sagernet/sing-box/log"
+	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
-	"github.com/sirupsen/logrus"
+
+	"github.com/google/go-github/v57/github"
 	"github.com/v2fly/v2ray-core/v5/app/router/routercommon"
 	"google.golang.org/protobuf/proto"
 )
@@ -43,7 +47,7 @@ func fetch(from string) (*github.RepositoryRelease, error) {
 }
 
 func get(downloadURL *string) ([]byte, error) {
-	logrus.Info("download ", *downloadURL)
+	log.Info("download ", *downloadURL)
 	response, err := http.Get(*downloadURL)
 	if err != nil {
 		return nil, err
@@ -52,18 +56,18 @@ func get(downloadURL *string) ([]byte, error) {
 	return io.ReadAll(response.Body)
 }
 
-func download(release *github.RepositoryRelease, assetName string) ([]byte, error) {
+func download(release *github.RepositoryRelease, input string) ([]byte, error) {
 	geositeAsset := common.Find(release.Assets, func(it *github.ReleaseAsset) bool {
-		return *it.Name == assetName
+		return *it.Name == input
 	})
 	geositeChecksumAsset := common.Find(release.Assets, func(it *github.ReleaseAsset) bool {
-		return *it.Name == assetName+".sha256sum"
+		return *it.Name == input+".sha256sum"
 	})
 	if geositeAsset == nil {
-		return nil, E.New(assetName+" asset not found in upstream release ", release.Name)
+		return nil, E.New(input+" asset not found in upstream release ", release.Name)
 	}
 	if geositeChecksumAsset == nil {
-		return nil, E.New(assetName+" checksum asset not found in upstream release ", release.Name)
+		return nil, E.New(input+" asset not found in upstream release ", release.Name)
 	}
 	data, err := get(geositeAsset.BrowserDownloadURL)
 	if err != nil {
@@ -165,13 +169,8 @@ func parse(vGeositeData []byte) (map[string][]geosite.Item, error) {
 	return domainMap, nil
 }
 
-func generate(release *github.RepositoryRelease, output string, assetName string) error {
-	outputFile, err := os.Create(output)
-	if err != nil {
-		return err
-	}
-	defer outputFile.Close()
-	vData, err := download(release, assetName)
+func generate(release *github.RepositoryRelease, input string, output string, ruleSet bool) error {
+	vData, err := download(release, input)
 	if err != nil {
 		return err
 	}
@@ -181,15 +180,53 @@ func generate(release *github.RepositoryRelease, output string, assetName string
 	}
 	outputPath, _ := filepath.Abs(output)
 	os.Stderr.WriteString("write " + outputPath + "\n")
-	return geosite.Write(outputFile, domainMap)
+	outputFile, err := os.Create(output)
+	if err != nil {
+		return err
+	}
+	defer outputFile.Close()
+	err = geosite.Write(outputFile, domainMap)
+	if err != nil {
+		return err
+	}
+	if ruleSet {
+		for code, domains := range domainMap {
+			var headlessRule option.DefaultHeadlessRule
+			defaultRule := geosite.Compile(domains)
+			headlessRule.Domain = defaultRule.Domain
+			headlessRule.DomainSuffix = defaultRule.DomainSuffix
+			headlessRule.DomainKeyword = defaultRule.DomainKeyword
+			headlessRule.DomainRegex = defaultRule.DomainRegex
+			var plainRuleSet option.PlainRuleSet
+			plainRuleSet.Rules = []option.HeadlessRule{
+				{
+					Type:           C.RuleTypeDefault,
+					DefaultOptions: headlessRule,
+				},
+			}
+			srsPath, _ := filepath.Abs(filepath.Join("rule-set", "geosite-"+code+".srs"))
+			os.Stderr.WriteString("write " + srsPath + "\n")
+			outputRuleSet, err := os.Create(srsPath)
+			if err != nil {
+				return err
+			}
+			err = srs.Write(outputRuleSet, plainRuleSet)
+			if err != nil {
+				outputRuleSet.Close()
+				return err
+			}
+			outputRuleSet.Close()
+		}
+	}
+	return nil
 }
 
-func release(source string, output string, assetName string) error {
+func release(source string, input string, output string, ruleSet bool) error {
 	sourceRelease, err := fetch(source)
 	if err != nil {
 		return err
 	}
-	err = generate(sourceRelease, output, assetName)
+	err = generate(sourceRelease, input, output, ruleSet)
 	if err != nil {
 		return err
 	}
@@ -197,16 +234,16 @@ func release(source string, output string, assetName string) error {
 }
 
 func main() {
-	err := release("chocolate4u/Iran-v2ray-rules", "geosite.db", "geosite.dat")
+	err := release("chocolate4u/Iran-v2ray-rules", "geosite.dat", "geosite.db", true)
 	if err != nil {
-		logrus.Fatal(err)
+		log.Fatal(err)
 	}
-	err = release("chocolate4u/Iran-v2ray-rules", "geosite-lite.db", "geosite-lite.dat")
+	err = release("chocolate4u/Iran-v2ray-rules", "geosite-lite.dat", "geosite-lite.db", false)
 	if err != nil {
-		logrus.Fatal(err)
+		log.Fatal(err)
 	}
-	err = release("chocolate4u/Iran-v2ray-rules", "security.db", "security.dat")
+	err = release("chocolate4u/Iran-v2ray-rules", "security.dat", "security.db", false)
 	if err != nil {
-		logrus.Fatal(err)
+		log.Fatal(err)
 	}
 }
