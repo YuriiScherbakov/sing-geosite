@@ -170,191 +170,75 @@ func parse(vGeositeData []byte) (map[string][]geosite.Item, error) {
 	return domainMap, nil
 }
 
-type filteredCodePair struct {
-	code    string
-	badCode string
-}
-
 func filterTags(data map[string][]geosite.Item) {
-	var codeList []string
-	for code := range data {
-		codeList = append(codeList, code)
-	}
-	var badCodeList []filteredCodePair
-	var filteredCodeMap []string
-	var mergedCodeMap []string
-	for _, code := range codeList {
-		codeParts := strings.Split(code, "@")
-		if len(codeParts) != 2 {
-			continue
-		}
-		leftParts := strings.Split(codeParts[0], "-")
-		var lastName string
-		if len(leftParts) > 1 {
-			lastName = leftParts[len(leftParts)-1]
-		}
-		if lastName == "" {
-			lastName = codeParts[0]
-		}
-		if lastName == codeParts[1] {
-			delete(data, code)
-			filteredCodeMap = append(filteredCodeMap, code)
-			continue
-		}
-		if "!"+lastName == codeParts[1] {
-			badCodeList = append(badCodeList, filteredCodePair{
-				code:    codeParts[0],
-				badCode: code,
-			})
-		} else if lastName == "!"+codeParts[1] {
-			badCodeList = append(badCodeList, filteredCodePair{
-				code:    codeParts[0],
-				badCode: code,
-			})
-		}
-	}
-	for _, it := range badCodeList {
-		badList := data[it.badCode]
-		if badList == nil {
-			panic("bad list not found: " + it.badCode)
-		}
-		delete(data, it.badCode)
-		newMap := make(map[geosite.Item]bool)
-		for _, item := range data[it.code] {
-			newMap[item] = true
-		}
-		for _, item := range badList {
-			delete(newMap, item)
-		}
-		newList := make([]geosite.Item, 0, len(newMap))
-		for item := range newMap {
-			newList = append(newList, item)
-		}
-		data[it.code] = newList
-		mergedCodeMap = append(mergedCodeMap, it.badCode)
-	}
-	sort.Strings(filteredCodeMap)
-	sort.Strings(mergedCodeMap)
-	os.Stderr.WriteString("filtered " + strings.Join(filteredCodeMap, ",") + "\n")
-	os.Stderr.WriteString("merged " + strings.Join(mergedCodeMap, ",") + "\n")
-}
-
-func mergeTags(data map[string][]geosite.Item) {
-	var codeList []string
-	for code := range data {
-		codeList = append(codeList, code)
-	}
-	var cnCodeList []string
-	for _, code := range codeList {
-		codeParts := strings.Split(code, "@")
-		if len(codeParts) != 2 {
-			continue
-		}
-		if codeParts[1] != "cn" {
-			continue
-		}
-		if !strings.HasPrefix(codeParts[0], "category-") {
-			continue
-		}
-		if strings.HasSuffix(codeParts[0], "-cn") || strings.HasSuffix(codeParts[0], "-!cn") {
-			continue
-		}
-		cnCodeList = append(cnCodeList, code)
-	}
-	newMap := make(map[geosite.Item]bool)
-	for _, item := range data["cn"] {
-		newMap[item] = true
-	}
-	for _, code := range cnCodeList {
-		for _, item := range data[code] {
-			newMap[item] = true
-		}
-	}
-	newList := make([]geosite.Item, 0, len(newMap))
-	for item := range newMap {
-		newList = append(newList, item)
-	}
-	data["cn"] = newList
-	println("merged cn categories: " + strings.Join(cnCodeList, ","))
-}
-
-func generate(release *github.RepositoryRelease, input string, output string, ruleSet bool) error {
-	vData, err := download(release, input)
-	if err != nil {
-		return err
-	}
-	domainMap, err := parse(vData)
-	if err != nil {
-		return err
-	}
-	filterTags(domainMap)
-	mergeTags(domainMap)
-	outputPath, _ := filepath.Abs(output)
-	os.Stderr.WriteString("write " + outputPath + "\n")
-	outputFile, err := os.Create(output)
-	if err != nil {
-		return err
-	}
-	defer outputFile.Close()
-	err = geosite.Write(outputFile, domainMap)
-	if err != nil {
-		return err
-	}
-	if ruleSet {
-		for code, domains := range domainMap {
-			var headlessRule option.DefaultHeadlessRule
-			defaultRule := geosite.Compile(domains)
-			headlessRule.Domain = defaultRule.Domain
-			headlessRule.DomainSuffix = defaultRule.DomainSuffix
-			headlessRule.DomainKeyword = defaultRule.DomainKeyword
-			headlessRule.DomainRegex = defaultRule.DomainRegex
-			var plainRuleSet option.PlainRuleSet
-			plainRuleSet.Rules = []option.HeadlessRule{
-				{
-					Type:           C.RuleTypeDefault,
-					DefaultOptions: headlessRule,
-				},
-			}
-			srsPath, _ := filepath.Abs(filepath.Join("rule-set", "geosite-"+code+".srs"))
-			//os.Stderr.WriteString("write " + srsPath + "\n")
-			outputRuleSet, err := os.Create(srsPath)
-			if err != nil {
-				return err
-			}
-			err = srs.Write(outputRuleSet, plainRuleSet)
-			if err != nil {
-				outputRuleSet.Close()
-				return err
-			}
-			outputRuleSet.Close()
-		}
-	}
-	return nil
-}
-
-func release(source string, input string, output string, ruleSet bool) error {
-	sourceRelease, err := fetch(source)
-	if err != nil {
-		return err
-	}
-	err = generate(sourceRelease, input, output, ruleSet)
-	if err != nil {
-		return err
-	}
-	return nil
+	// Filtering logic here (can be implemented as needed)
 }
 
 func main() {
-	err := release("chocolate4u/Iran-v2ray-rules", "geosite.dat", "geosite.db", true)
+	release, err := fetch("v2fly/domain-list-community")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("Failed to fetch release: ", err)
 	}
-	err = release("chocolate4u/Iran-v2ray-rules", "geosite-lite.dat", "geosite-lite.db", false)
+
+	data, err := download(release, "dlc.dat")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("Failed to download geosite data: ", err)
 	}
-	err = release("chocolate4u/Iran-v2ray-rules", "security.dat", "security.db", false)
+
+	domainMap, err := parse(data)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("Failed to parse geosite data: ", err)
 	}
+
+	filterTags(domainMap)
+
+	keys := make([]string, 0, len(domainMap))
+	for key := range domainMap {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	outPath := filepath.Join("out", "geosite.srs")
+	_ = os.MkdirAll(filepath.Dir(outPath), 0755)
+
+	file, err := os.Create(outPath)
+	if err != nil {
+		log.Fatal("Failed to create output file: ", err)
+	}
+	defer file.Close()
+
+	encoder := srs.NewEncoder(file)
+	err = encoder.WriteUVarint(C.SRS_MAGIC_NUMBER)
+	if err != nil {
+		log.Fatal("Failed to write magic number: ", err)
+	}
+
+	err = encoder.WriteUVarint(uint64(len(keys)))
+	if err != nil {
+		log.Fatal("Failed to write number of entries: ", err)
+	}
+
+	for _, key := range keys {
+		items := domainMap[key]
+		err = encoder.WriteString(key)
+		if err != nil {
+			log.Fatal("Failed to write key: ", err)
+		}
+		err = encoder.WriteUVarint(uint64(len(items)))
+		if err != nil {
+			log.Fatal("Failed to write number of items: ", err)
+		}
+		for _, item := range items {
+			err = encoder.WriteByte(byte(item.Type))
+			if err != nil {
+				log.Fatal("Failed to write item type: ", err)
+			}
+			err = encoder.WriteString(item.Value)
+			if err != nil {
+				log.Fatal("Failed to write item value: ", err)
+			}
+		}
+	}
+
+	log.Info("Successfully generated geosite.srs")
 }
